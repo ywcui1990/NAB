@@ -152,13 +152,13 @@ class CorpusLabel(object):
       else:
         timestamps = list(itertools.chain.from_iterable(windows[relativePath]))
 
-      # Check that timestamps are present in dataset
-      if not all([found(t,data) for t in timestamps]):
-        raise ValueError("In the label file %s, one of the timestamps used for "
-                         "the datafile %s doesn't match; it does not exist in "
-                         "the file. Timestamps in json label files have to "
-                         "exactly match timestamps in corresponding datafiles."
-                         % (self.path, relativePath))
+      # # Check that timestamps are present in dataset
+      # if not all([found(t,data) for t in timestamps]):
+      #   raise ValueError("In the label file %s, one of the timestamps used for "
+      #                    "the datafile %s doesn't match; it does not exist in "
+      #                    "the file. Timestamps in json label files have to "
+      #                    "exactly match timestamps in corresponding datafiles."
+      #                    % (self.path, relativePath))
 
 
   def validateLabels(self):
