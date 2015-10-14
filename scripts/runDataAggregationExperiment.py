@@ -3,9 +3,12 @@ from os.path import isfile, join, exists
 import pandas as pd
 import numpy as np
 from scipy import signal
-import matplotlib.pyplot as plt
-plt.close('all')
-plt.ion()
+
+display = False
+if display:
+  import matplotlib.pyplot as plt
+  plt.close('all')
+  plt.ion()
 
 def plotWaveletPower(sig, cwtmatr, time_scale, x_range=None, title=''):
   if x_range is None:
@@ -87,26 +90,27 @@ def aggregate_nab_data(thresh_list, dataPath='data/', aggregatedDataPath='data_a
       if not exists(figDir):
           makedirs(figDir)
 
-      plt.close('all')
-      plotWaveletPower(sig, cwtmatr, time_scale)
-      plt.savefig(join(figDir, data_file_dir[-1] + 'wavelet_transform.pdf'))
+      if display:
+        plt.close('all')
+        plotWaveletPower(sig, cwtmatr, time_scale)
+        plt.savefig(join(figDir, data_file_dir[-1] + 'wavelet_transform.pdf'))
 
-      fig, axs = plt.subplots(nrows=2, ncols=1)
-      ax = axs[0]
-      ax.plot(time_scale, cwt_power_var, '-o')
-      ax.set_xscale('log')
-      ax.set_xlabel(' Time Scale (sec) ')
-      ax.set_ylabel(' Variance of Power')
-      ax.autoscale(tight='True')
-      ax.set_title(datafiles[i])
+        fig, axs = plt.subplots(nrows=2, ncols=1)
+        ax = axs[0]
+        ax.plot(time_scale, cwt_power_var, '-o')
+        ax.set_xscale('log')
+        ax.set_xlabel(' Time Scale (sec) ')
+        ax.set_ylabel(' Variance of Power')
+        ax.autoscale(tight='True')
+        ax.set_title(datafiles[i])
 
-      ax = axs[1]
-      ax.plot(time_scale, cum_power_var, '-o')
-      ax.set_xscale('log')
-      ax.set_xlabel(' Time Scale (sec) ')
-      ax.set_ylabel(' Accumulated Variance of Power')
-      ax.autoscale(tight='True')
-      plt.savefig(join(figDir, data_file_dir[-1] + 'aggregation_time_scale.pdf'))
+        ax = axs[1]
+        ax.plot(time_scale, cum_power_var, '-o')
+        ax.set_xscale('log')
+        ax.set_xlabel(' Time Scale (sec) ')
+        ax.set_ylabel(' Accumulated Variance of Power')
+        ax.autoscale(tight='True')
+        plt.savefig(join(figDir, data_file_dir[-1] + 'aggregation_time_scale.pdf'))
 
       for thresh in thresh_list:
         aggregation_time_scale = time_scale[np.where(cum_power_var >= thresh)[0][0]]
@@ -172,36 +176,34 @@ def get_pre_aggregated_anomaly_score(data_path, result_folder, result_folder_pre
       result_pre_aggregate.to_csv(result_file_pre_aggregate, index=False)
       print " write pre-aggregated file to ", result_file_pre_aggregate
 
-      plt.figure(2)
-      plt.plot(time_stamp_after_aggregation, binary_anomaly_score_after_aggregation)
-      plt.plot(time_stamp_pre_aggregation, binary_anomaly_score_pre_aggregation)
-      # new_data_dir = join(newDataPath, data_file_dir[2])
-      # data_length.append(len(dat))
+      # plt.figure(2)
+      # plt.plot(time_stamp_after_aggregation, binary_anomaly_score_after_aggregation)
+      # plt.plot(time_stamp_pre_aggregation, binary_anomaly_score_pre_aggregation)
 
 if __name__ == "__main__":
   # thresh_list = [0.001, 0.002]
   thresh_list = [0, 0.001, 0.002, 0.01]
 
   # step 1: aggregate NAB data with different threshold
-  # print " aggregating NAB data ..."
-  # aggregate_nab_data(thresh_list)
+  print " aggregating NAB data ..."
+  aggregate_nab_data(thresh_list)
 
   # step 2: run HTM on aggregated NAB data
-  # for thresh in thresh_list:
-  #   print " run HTM on aggregated data with threshold " + str(thresh)
-  #   system("python run.py -d numenta --detect --dataDir data_aggregate/thresh=" + str(thresh) +
-  #             "/ --resultsDir results_aggregate/thresh=" + str(thresh) + " --skipConfirmation")
+  for thresh in thresh_list:
+    print " run HTM on aggregated data with threshold " + str(thresh)
+    system("python run.py -d numenta --detect --dataDir data_aggregate/thresh=" + str(thresh) +
+              "/ --resultsDir results_aggregate/thresh=" + str(thresh) + " --skipConfirmation")
   #
   # # step 3: get pre-aggregated anomaly score
-  # for thresh in thresh_list:
-  #   get_pre_aggregated_anomaly_score(data_path='data/',
-  #                                    result_folder='results_aggregate/thresh=' + str(thresh) + '/numenta',
-  #                                    result_folder_pre_aggregate='results_pre_aggregate/thresh=' + str(thresh) + '/numenta')
-  #
-  # # step 4: run NAB scoring
-  # for thresh in thresh_list:
-  #   print " run scoring on aggregated data with threshold " + str(thresh)
-  #   system("python run.py -d numenta --score --skipConfirmation --resultsDir results_pre_aggregate/thresh="+str(thresh)+"/")
+  for thresh in thresh_list:
+    get_pre_aggregated_anomaly_score(data_path='data/',
+                                     result_folder='results_aggregate/thresh=' + str(thresh) + '/numenta',
+                                     result_folder_pre_aggregate='results_pre_aggregate/thresh=' + str(thresh) + '/numenta')
+
+  # step 4: run NAB scoring
+  for thresh in thresh_list:
+    print " run scoring on aggregated data with threshold " + str(thresh)
+    system("python run.py -d numenta --score --skipConfirmation --resultsDir results_pre_aggregate/thresh="+str(thresh)+"/")
 
   # step 5: read & compare scores
   standard_score = []
