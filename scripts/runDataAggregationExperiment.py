@@ -3,8 +3,9 @@ from os.path import isfile, join, exists
 import pandas as pd
 import numpy as np
 from scipy import signal
+import numpy.matlib
 
-display = False
+display = True
 if display:
   import matplotlib.pyplot as plt
   plt.close('all')
@@ -113,7 +114,11 @@ def aggregate_nab_data(thresh_list, dataPath='data/', aggregatedDataPath='data_a
         plt.savefig(join(figDir, data_file_dir[-1] + 'aggregation_time_scale.pdf'))
 
       for thresh in thresh_list:
-        aggregation_time_scale = time_scale[np.where(cum_power_var >= thresh)[0][0]]
+        cutoff_time_scale = time_scale[np.where(cum_power_var >= thresh)[0][0]]
+        aggregation_time_scale = cutoff_time_scale/10.0
+        if aggregation_time_scale < dt*4:
+          aggregation_time_scale = dt*4
+
         new_sampling_interval = str(int(aggregation_time_scale/4))+'S'
         ts_aggregate = ts.resample(new_sampling_interval, how='mean')
         ts_aggregate = ts_aggregate.interpolate(method='linear')
@@ -121,6 +126,9 @@ def aggregate_nab_data(thresh_list, dataPath='data/', aggregatedDataPath='data_a
         timestamp = ts_aggregate.index
         value = np.array(ts_aggregate.values)
         dat_aggregated = pd.DataFrame(np.transpose(np.array([timestamp, value])), columns=['timestamp', 'value'])
+
+        print "thresh: ", thresh, " original dt ", dt, " new dt: ", new_sampling_interval, \
+              "original length: ", len(ts), " new length: ", len(ts_aggregate)
 
         new_data_dir = join(aggregatedDataPath, 'thresh='+str(thresh), data_file_dir[-2])
         if not exists(new_data_dir):
@@ -181,35 +189,91 @@ def get_pre_aggregated_anomaly_score(data_path, result_folder, result_folder_pre
       # plt.plot(time_stamp_pre_aggregation, binary_anomaly_score_pre_aggregation)
 
 if __name__ == "__main__":
-  # thresh_list = [0.001, 0.002]
-  thresh_list = [0, 0.001, 0.002, 0.01]
 
-  # step 1: aggregate NAB data with different threshold
-  print " aggregating NAB data ..."
-  aggregate_nab_data(thresh_list)
-
-  # step 2: run HTM on aggregated NAB data
-  for thresh in thresh_list:
-    print " run HTM on aggregated data with threshold " + str(thresh)
-    system("python run.py -d numenta --detect --dataDir data_aggregate/thresh=" + str(thresh) +
-              "/ --resultsDir results_aggregate/thresh=" + str(thresh) + " --skipConfirmation")
+  # thresh_list = [0, 0.0005, 0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009]
+  # thresh_list = [0, 0.05, 0.1]
+  # thresh_list = [0, 0.02, 0.04, 0.06, 0.08, 0.1, 0.12, 0.14, 0.16, 0.18, 0.2]
+  thresh_list = [0, 0.02, 0.04, 0.06, 0.08, 0.1, 0.12, 0.14, 0.16, 0.18, 0.2,
+                 0.22, 0.24, 0.26, 0.28, 0.3, 0.32, 0.34, 0.36, 0.38, 0.40]
+  # thresh_list = np.linspace(0, 0.01, 11)
   #
+  # # step 1: aggregate NAB data with different threshold
+  # print " aggregating NAB data ..."
+  # aggregate_nab_data(thresh_list)
+  #
+  # # step 2: run HTM on aggregated NAB data
+  # for thresh in thresh_list:
+  #   print " run HTM on aggregated data with threshold " + str(thresh)
+  #   system("python run.py -d numenta --detect --dataDir data_aggregate/thresh=" + str(thresh) +
+  #             "/ --resultsDir results_aggregate/thresh=" + str(thresh) + " --skipConfirmation")
+  # #
   # # step 3: get pre-aggregated anomaly score
-  for thresh in thresh_list:
-    get_pre_aggregated_anomaly_score(data_path='data/',
-                                     result_folder='results_aggregate/thresh=' + str(thresh) + '/numenta',
-                                     result_folder_pre_aggregate='results_pre_aggregate/thresh=' + str(thresh) + '/numenta')
-
-  # step 4: run NAB scoring
-  for thresh in thresh_list:
-    print " run scoring on aggregated data with threshold " + str(thresh)
-    system("python run.py -d numenta --score --skipConfirmation --resultsDir results_pre_aggregate/thresh="+str(thresh)+"/")
+  # for thresh in thresh_list:
+  #   get_pre_aggregated_anomaly_score(data_path='data/',
+  #                                    result_folder='results_aggregate/thresh=' + str(thresh) + '/numenta',
+  #                                    result_folder_pre_aggregate='results_pre_aggregate/thresh=' + str(thresh) + '/numenta')
+  #
+  # # step 4: run NAB scoring
+  # for thresh in thresh_list:
+  #   print " run scoring on aggregated data with threshold " + str(thresh)
+  #   system("python run.py -d numenta --score --skipConfirmation --resultsDir results_pre_aggregate/thresh="+str(thresh)+"/")
 
   # step 5: read & compare scores
   standard_score = []
+  data_length_all = []
   for thresh in thresh_list:
     scorefile = "results_pre_aggregate/thresh=" + str(thresh) + "/numenta/numenta_standard_scores.csv"
     scoredf = pd.read_csv(scorefile, header=0)
+    scoredf = scoredf.sort('File')
+    scoredf.index = range(len(scoredf))
     standard_score.append(scoredf.Score.values[:-1])
+    data_length = []
+    for i in xrange(len(scoredf.File)-1):
+      datafile = './data_aggregate/thresh=' + str(thresh) + '/' + scoredf.File[i]
+      dat = pd.read_csv(datafile, header=0, names=['timestamp', 'value'])
+      data_length.append(len(dat))
+    data_length_all.append(data_length)
 
+  data_length_all = np.array(data_length_all)
   standard_score = np.array(standard_score)
+
+  short_dat = np.where(data_length_all[0, :] < 1000)[0]
+  long_dat = np.where(data_length_all[0, :] > 1000)[0]
+  use_dat = np.array(range(data_length_all.shape[1]))
+  use_dat = long_dat
+
+
+  plt.imshow(data_length_all, interpolation='nearest', aspect='auto')
+
+  anomaly_score_diff = standard_score[:, long_dat] - numpy.matlib.repmat(standard_score[0, long_dat], len(thresh_list), 1)
+
+  fig=plt.figure()
+  plt.imshow(anomaly_score_diff, interpolation='nearest', aspect='auto')
+  plt.yticks(range(len(thresh_list)), thresh_list)
+  plt.xticks(range(len(scoredf.File)-1), scoredf.File.values[:-1], rotation='vertical')
+  plt.subplots_adjust(bottom=0.6)
+  plt.xlabel(' Dataset ')
+  plt.ylabel(' Threshold')
+  plt.title(' Anomaly Score ')
+  plt.colorbar()
+  plt.clim(-2, 2)
+
+
+  plt.figure()
+  plt.subplot(2, 1, 1)
+  plt.plot(np.array(thresh_list)*100, np.median(standard_score[:, use_dat], 1), '-o')
+  plt.plot(np.array(thresh_list)*100, np.mean(standard_score[:, use_dat], 1), '-o')
+  plt.legend(['Median', 'Mean'])
+  plt.xlabel(' Threshold (%)')
+  plt.ylabel(' Median Anomaly Score ')
+
+  plt.subplot(2, 1, 2)
+  plt.plot(np.array(thresh_list)*100, np.median(data_length_all[:, use_dat], 1), '-o')
+  plt.plot(np.array(thresh_list)*100, np.mean(data_length_all[:, use_dat], 1), '-o')
+  plt.xlabel(' Threshold (%)')
+  plt.ylabel(' Data Length ')
+  plt.legend(['Median', 'Mean'])
+  plt.savefig('AnomalyScore_Vs_AggregationThreshold.pdf')
+  num_better_anomaly_score = []
+  for i in xrange(len(thresh_list)-1):
+    num_better_anomaly_score.append(len(np.where(standard_score[i+1, :] > standard_score[0, :])[0]))
